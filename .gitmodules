@@ -1,0 +1,3 @@
+[submodule "polyeval"]
+	path = polyeval
+	url = git@github.com:devillegna/polyeval.git
