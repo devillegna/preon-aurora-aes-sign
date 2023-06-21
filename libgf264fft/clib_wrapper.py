@@ -1,8 +1,7 @@
 import ctypes
-import pathlib
+import os
 
-
-_clib = ctypes.CDLL( pathlib.Path().resolve()/ "../polyeval/btfy/gf264/libgf264btfy.so" )
+_clib = ctypes.CDLL( os.path.dirname(__file__) + "/libgf264btfy.so" )
 
 #uint64_t index_to_gf264( uint64_t fft_position_index );
 _clib.index_to_gf264.argtypes = [ ctypes.c_uint64 ]
