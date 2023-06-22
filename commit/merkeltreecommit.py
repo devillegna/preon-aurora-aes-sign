@@ -1,9 +1,9 @@
 
 
-from Crypto.Random import get_random_bytes
+import sys
+sys.path.insert(0, '../' )
 
-def _randombytes( bsize ) :
-    return get_random_bytes( bsize )
+from utils import randombytes as utrd
 
 
 LAMBDA = 256
@@ -14,7 +14,7 @@ def commit( msgList ):
     num = len(msgList)
     assert( 2 <= num )
     assert( 0==(num&(num-1)) )   # len(msgList) is a power of 2
-    r = [ _randombytes( LAMBDA//8 ) for i in range(num) ]
+    r = [ utrd.randombytes( LAMBDA//8 ) for i in range(num) ]
     mktree = [ [ G.new(b''.join([msgList[i] , r[i]])).digest() for i in range(num) ]  ]
     while( num > 2 ):
         last_layer = mktree[-1]
@@ -39,3 +39,10 @@ def verify( rt , idx , auth_path ):
         else       : state = G.new( b''.join([state,auth_path[i]]) ).digest()
         idx = idx//2
     return state == rt
+
+
+
+if '__main__' == __name__ :
+   rt, r , mktree = commit( [ b'123' , b'456' , b'789' , b'012' ] )
+   auth_path = open( b'012' , 3 , r , mktree )
+   print( "PASS?" , verify( rt , 3 , auth_path ) )
