@@ -197,18 +197,5 @@ def get_r1cs(constraints_count, constaint_len, witness_index_base, aes_size):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 if __name__ == '__main__' :
     print( get_r1cs(4096, 4096, 64, 128) )
