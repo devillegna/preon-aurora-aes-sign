@@ -4,6 +4,8 @@ sys.path.insert(0, '../' )
 
 from libgf264fft import clib_wrapper as gf264
 
+GF_EXT = 3
+
 def gf2192_mul( a , b ):
     a0 = a&0xffffffffffffffff
     a1 = (a>>64)&0xffffffffffffffff
@@ -20,3 +22,5 @@ def gf2192_mul( a , b ):
     c1 ^= c4^c3
     c0 ^= c3
     return c0|(c1<<64)|(c2<<128)
+
+def mul( a , b ) : return gf2192_mul( a , b )
