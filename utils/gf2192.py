@@ -32,3 +32,36 @@ def gf2192_mul( a , b ):
     return c0|(c1<<64)|(c2<<128)
 
 def mul( a , b ) : return gf2192_mul( a , b )
+
+from libgf264fft import clib_wrapper as cgf
+
+def fft( fi , rho , offset ):
+    fi_len = len(fi)
+    assert 0==(fi_len&(fi_len-1))
+    fi_gf264 = list( zip( *[to_gf264s(e) for e in fi] ) )  # transform gflist to 3 gf264lists
+    r_gf264 = [ [] for _ in range(GF_EXT) ]
+    for j in range(GF_EXT):     # 3 x gf264 ffts
+         for k in range(rho): r_gf264[j].extend( cgf.btfy( fi_gf264[j] , offset ^ (k*fi_len) ) )
+    r0 = [ from_gf264s(*e) for e in zip(*r_gf264) ] # transform 3 gf264lists to gflist
+    return r0
+
+def ifft( fi , rho , offset ):
+    fi_len = len(fi)
+    assert 0==(fi_len&(fi_len-1))
+    fi_gf264 = list( zip( *[to_gf264s(e) for e in fi] ) )  # transform gflist to 3 gf264lists
+    r_gf264 = [ [] for _ in range(GF_EXT) ]
+    for j in range(GF_EXT):     # 3 x gf264 ffts
+         for k in range(rho): r_gf264[j].extend( cgf.ibtfy( fi_gf264[j] , offset ^ (k*fi_len) ) )
+    r0 = [ from_gf264s(*e) for e in zip(*r_gf264) ] # transform 3 gf264lists to gflist
+    return r0
+
+def ibtfy_1( vi , offset ):
+    l = len(vi)
+    vi_gf264 = list( zip( *[to_gf264s(e) for e in vi] ) )
+    r_gf264 = [ [] for _ in range(GF_EXT) ]
+    for j in range(GF_EXT):
+         for k in range( 0,l,2 ):
+              r_gf264[j].extend( cgf.ibtfy( vi_gf264[j][k:k+2] , offset^k ) )
+    r = [ from_gf264s(*e) for e in zip(*r_gf264) ]
+    return r
+
