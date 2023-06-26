@@ -120,7 +120,7 @@ def ldt_gen_proof( f0 , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ):
 ##########################################
 
 
-def ldt_gen_challenges( _poly_len , h_state , commits , d1poly , Nq , RS_rho = 8 , verbose = 1 ):
+def ldt_recover_challenges( _poly_len , h_state , commits , d1poly , Nq , RS_rho = 8 , verbose = 1 ):
     if 1 == verbose : dump = print
     else : dump = _dummy
 
@@ -202,6 +202,6 @@ def ldt_verify( proof , _poly_len , h_state , Nq = 26 , RS_rho = 8 , verbose = 1
     commits     = proof[:n_commits]
     d1poly      = proof[n_commits]
     open_mesgs  = proof[n_commits+1:]
-    xi, queries = ldt_gen_challenges(_poly_len,h_state,commits,d1poly,Nq, RS_rho, verbose )
+    xi, queries = ldt_recover_challenges(_poly_len,h_state,commits,d1poly,Nq, RS_rho, verbose )
     return ldt_verify_proof(commits,d1poly,open_mesgs,xi,queries,Nq,verbose)
 

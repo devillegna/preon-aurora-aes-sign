@@ -31,7 +31,17 @@ def gf2192_mul( a , b ):
     c0 ^= c3
     return c0|(c1<<64)|(c2<<128)
 
-def mul( a , b ) : return gf2192_mul( a , b )
+mul = gf2192_mul
+
+def gf2192_mul_gf264( a , b264 ):
+    a0, a1, a2 = to_gf264s(a)
+    c0 = gf264.gf264_mul(a0,b264)
+    c1 = gf264.gf264_mul(a1,b264)
+    c2 = gf264.gf264_mul(a2,b264)
+    return c0|(c1<<64)|(c2<<128)
+
+mul_gf264 = gf2192_mul_gf264
+
 
 from libgf264fft import clib_wrapper as cgf
 
