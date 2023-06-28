@@ -75,3 +75,16 @@ def ibtfy_1( vi , offset ):
     r = [ from_gf264s(*e) for e in zip(*r_gf264) ]
     return r
 
+def polydiv( f , si ):
+    f_len = len(f)
+    f_gf264 = list( zip( *[to_gf264s(e) for e in f] ) )  # transform gflist to 3 gf264lists
+    r_gf264 = [ cgf.polydiv( f_gf264[i],si) for i in range(GF_EXT) ]
+    r0 = [ from_gf264s(*e) for e in zip(*r_gf264) ] # transform 3 gf264lists to gflist
+    return r0
+
+def ipolydiv( f , si ):
+    f_len = len(f)
+    f_gf264 = list( zip( *[to_gf264s(e) for e in f] ) )  # transform gflist to 3 gf264lists
+    r_gf264 = [ cgf.ipolydiv( f_gf264[i],si) for i in range(GF_EXT) ]
+    r0 = [ from_gf264s(*e) for e in zip(*r_gf264) ] # transform 3 gf264lists to gflist
+    return r0
