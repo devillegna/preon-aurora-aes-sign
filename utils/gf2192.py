@@ -10,7 +10,7 @@ GF_BSIZE = 8*3
 
 def from_bytes( bv ): return int.from_bytes(bv,byteorder='little')
 
-def from_bytes_x2( bb ): return [ int.from_bytes(bb[:GF_BSIZE],byteorder='little'), int.from_bytes(bb[GF_BSIZE:2*GF_BSIZE],byteorder='little') ]
+def from_bytes_x2( bb ): return ( int.from_bytes(bb[:GF_BSIZE],byteorder='little'), int.from_bytes(bb[GF_BSIZE:2*GF_BSIZE],byteorder='little') ) 
 
 def to_bytes( a ): return a.to_bytes(GF_BSIZE,byteorder='little')
 
