@@ -21,3 +21,8 @@ git submodule update --init --recursive
 ```
 make
 ```
+
+## Run examples
+
+Please see/run preon-test.ipynb with jupyter notebook.
+
