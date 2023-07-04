@@ -39,7 +39,7 @@ class _prng(object):
         return r
 
 
-_debug = 1
+_debug = 0
 
 #def randombytes( bsize ) :
 #    return get_random_bytes( bsize )

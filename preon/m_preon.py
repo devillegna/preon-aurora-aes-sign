@@ -27,7 +27,7 @@ def preon_sign( sk , mesg ):
     MATs = r1cs.get_r1cs( R1CSz.aes128R1CS_num_constrains , len(z) , 64, 128)  # AES128
     mat_a , mat_b , mat_c = np.array(MATs['A']) , np.array(MATs['B']) , np.array(MATs['C'])
     h_state = H.gen( bytes([1]) , mesg )
-    sig = aurora.generate_proof( (mat_a,mat_b,mat_c,z,64) , h_state )
+    sig = aurora.generate_proof( (mat_a,mat_b,mat_c,z,64) , h_state , RS_rho = 32 )
     return sig
 
 def preon_verify( pk , sig , mesg ):
@@ -36,4 +36,4 @@ def preon_verify( pk , sig , mesg ):
     MATs = r1cs.get_r1cs( R1CSz.aes128R1CS_num_constrains , len(z) , 64, 128)  # AES128
     mat_a , mat_b , mat_c = np.array(MATs['A']) , np.array(MATs['B']) , np.array(MATs['C'])
     h_state = H.gen( bytes([1]) , mesg )
-    return aurora.verify_proof( sig , (mat_a,mat_b,mat_c,z[:64],64) , h_state )
+    return aurora.verify_proof( sig , (mat_a,mat_b,mat_c,z[:64],64) , h_state , RS_rho = 32  )
