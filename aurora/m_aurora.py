@@ -292,8 +292,8 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ) :
     proof.extend( ldt_open_mesgs )
 
     ## open queries
-    proof.append( [ mt.open( mesgs0[idx],idx,r_leaf0,mktree0) for idx in ldt_queries ] )
-    proof.append( [ mt.open( mesgs1[idx],idx,r_leaf1,mktree1) for idx in ldt_queries ] )
+    proof.append( mt.batchopen(ldt_queries,mesgs0,r_leaf0,mktree0) )
+    proof.append( mt.batchopen(ldt_queries,mesgs1,r_leaf1,mktree1) )
 
     return proof
 
@@ -336,12 +336,10 @@ def verify_proof( proof , R1CS , h_state , RS_rho = 8 , verbose = 1 ) :
     xi, queries = fri.ldt_recover_challenges(_poly_len,h_state,ldt_commits,ldt_d1poly,Nq, RS_rho, verbose=0 )
 
     dump( "check if commits are opened correctly" )
-    open0 = [ mt.verify(rt0,idx,open_mesgs0[i]) for i,idx in enumerate(queries) ]
-    if not all( open0 ) :
+    if not mt.batchverify(queries,rt0,open_mesgs0) :
         dump( "open0 fails" )
         return False
-    open1 = [ mt.verify(rt1,idx,open_mesgs1[i]) for i,idx in enumerate(queries) ]
-    if not all( open1 ) :
+    if not mt.batchverify(queries,rt1,open_mesgs1) :
         dump( "open1 fails" )
         return False
     dump( "all passed" )

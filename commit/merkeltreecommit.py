@@ -32,6 +32,9 @@ def open( msg , idx , r , mktree ):
         idx = idx//2
     return auth_path
 
+def batchopen( idxes , mesgs , r , mktree ):
+    return [ open(mesgs[idx], idx , r , mktree) for idx in idxes ]
+
 def verify( rt , idx , auth_path ):
     state = G.new( b''.join([auth_path[0],auth_path[1]]) ).digest()
     for i in range(2,len(auth_path)):
@@ -40,6 +43,9 @@ def verify( rt , idx , auth_path ):
         idx = idx//2
     return state == rt
 
+def batchverify( idxes , rt , auth_paths ):
+    vv = [ verify(rt,idx,auth_paths[i]) for i,idx in enumerate(idxes) ]
+    return all(vv)
 
 
 if '__main__' == __name__ :

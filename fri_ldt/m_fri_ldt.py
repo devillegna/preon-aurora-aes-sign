@@ -109,7 +109,7 @@ def ldt_query_phase( f_length , mktrees, h_state , Nq , RS_rho=8 , verbose = 1 )
     j = 0
     for root , all_mesg, randomness, tree in mktrees :
         dump( f"open iteration: {j}" )
-        open_mesgs.append( [ mt.open(all_mesg[queries[i]],queries[i],randomness,tree) for i in range(Nq) ] )
+        open_mesgs.append( mt.batchopen(queries,all_mesg,randomness,tree) )
         dump( f"proof len:[{len(open_mesgs)}] : auth path len:{len(open_mesgs[-1][0])}" )
         queries = [ q//2 for q in queries ]
         j = j+1
@@ -173,9 +173,10 @@ def ldt_verify_proof( commits , d1poly , open_mesgs , xi , queries , Nq , verbos
     for idx,auths in enumerate(open_mesgs) :
         dump( f"open iteration: {j}" )
         dump( f"auths[{len(auths[0])}]: Nbyte: ", sum( map( len,auths[0]) ) )
-        verify_j = [ mt.verify( commits[j] , queries[i] , auths[i] ) for i in range(Nq)]
-        dump( f"verify opened commits:" , all(verify_j) )
-        if not all(verify_j) : return False
+        if not mt.batchverify( queries , commits[j] , auths ) :
+            dump("batchverify() fails")
+            return False
+        else : dump("oepned mesgs are verified.")
 
         # check linear relations
         mesg = [ path[0] for path in auths ]
