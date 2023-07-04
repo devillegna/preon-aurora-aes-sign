@@ -35,7 +35,7 @@ class _prng(object):
         if nbytes :
             self._update()
             r.extend( self.buff[:nbytes] )
-            _prng_used = nbytes
+            self.used = nbytes
         return r
 
 
