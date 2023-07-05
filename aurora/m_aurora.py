@@ -283,7 +283,9 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ) :
            for i,rgi in enumerate(g_raise) ]
     ## LDT f0
     dump( "ldt |f0|:", len(f0) )
-    ldt_commits , ldt_d1poly , ldt_mktrees , h_state = fri.ldt_commit_phase( f0 , h_state , RS_rho , verbose=0 )
+    v_f0 = gf.fft( f0 , RS_rho , offset )
+    dump( "calculate RS code of f0: |v_f0|: " , len(v_f0) )
+    ldt_commits , ldt_d1poly , ldt_mktrees , h_state = fri.ldt_commit_phase( v_f0 , len(f0) , h_state , RS_rho , verbose=0 )
     ldt_open_mesgs , ldt_queries = fri.ldt_query_phase( len(f0) , ldt_mktrees , h_state , Nq , RS_rho , verbose=0 )
     dump( "ldt queries:" , ldt_queries )
 
@@ -388,17 +390,12 @@ def verify_proof( proof , R1CS , h_state , RS_rho = 8 , verbose = 1 ) :
     offset = 1<<63
     rs_codewords = codewords_of_public_polynomials( alpha , vec_1v , mat_A , mat_B , mat_C , pad_len , offset , RS_rho , verbose )
 
-    dump( "check virtual oracle consistency with the first opened commit of ldt." )
-    open_mesgs2 = ldt_open_mesgs[0]
-    for k,_idx in enumerate(queries) :
-        if open_mesgs2[k][0] != values_from_virtual_oracle( _idx , open_mesgs0[k][0] , open_mesgs1[k][0] , (s1,s2,s3)
-                                 , y , rs_codewords , inst_dim , r1cs_dim , offset ) :
-            dump( f"virtual oracle fails at idx: {_idx}" )
-            return False
-    dump( "The first opened commit should be replaced by the values from virtual oracle actually." )
+    dump( "recover first opened commit of ldt from the virtual oracle of aurora" )
+    ldt_1st_mesgs = [ values_from_virtual_oracle( _idx , open_mesgs0[k][0] , open_mesgs1[k][0] , (s1,s2,s3)
+                                 , y , rs_codewords , inst_dim , r1cs_dim , offset ) for k,_idx in enumerate(queries) ]
 
     dump("verify ldt")
-    ldt_r = fri.ldt_verify_proof(ldt_commits,ldt_d1poly,ldt_open_mesgs,xi,queries,Nq,verbose=0)
+    ldt_r = fri.ldt_verify_proof(ldt_commits,ldt_d1poly,ldt_1st_mesgs,ldt_open_mesgs,xi,queries,Nq,verbose=0)
     dump( ldt_r )
     if not ldt_r : return False
 
