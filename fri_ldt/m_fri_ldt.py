@@ -60,8 +60,12 @@ def ldt_commit_phase( f0 , h_state , RS_rho=8 , verbose = 1 ):
         dump( f"commit evaluated valuse. --> commits[{len(commits)-1}] <- |mesg|: {len(mesg)}" )
         dump( f"|commits| = {len(commits)}" )
 
-        h_state = H.gen( h_state , gf.to_bytes(xi) )
-        dump( f"update h_state <- H( h_state|| xi ): {h_state}" )
+        if 0 == i :
+            h_state = H.gen( h_state , gf.to_bytes(xi) )
+            dump( f"update h_state <- H( h_state|| xi ): {h_state}" )
+        else      :
+            h_state = H.gen( h_state , gf.to_bytes(xi) , root )
+            dump( f"update h_state <- H( h_state|| xi || commit ): {h_state}" )
 
         i = i+1
         dump( f"update i: {i}" )
@@ -141,8 +145,13 @@ def ldt_recover_challenges( _poly_len , h_state , commits , d1poly , Nq , RS_rho
         dump( f"iteration {i}: [{poly_len}] -> [{poly_len//2}]:" )
         dump( f"mt.root = commits[{i}] = " ,  commits[i] )
 
-        h_state = H.gen( h_state , gf.to_bytes(xi[i]) )
-        dump( f"update h_state <- H( h_state|| xi ): {h_state}" )
+        if i==0:
+            h_state = H.gen( h_state , gf.to_bytes(xi[i]) )
+            dump( f"update h_state <- H( h_state|| xi ): {h_state}" )
+        else :
+            h_state = H.gen( h_state , gf.to_bytes(xi[i]) , commits[i] )
+            dump( f"update h_state <- H( h_state|| xi || commit ): {h_state}" )
+
 
         i = i+1
         dump( f"update i: {i}" )
@@ -197,17 +206,12 @@ def ldt_verify_proof( commits , d1poly , open_mesgs , xi , queries , Nq , verbos
 
 def _check_linear_relation( mesgj1 , mesgj0 , idx , xi , offset ) :
     new_j0 = gf.from_bytes_x2( mesgj0 )
-    #print( f"idx: {hex(idx)}")
-    #print( f"target: ({hex(new_j0[0])} , {hex(new_j0[1])})" )
     org_j1 = gf.from_bytes_x2( mesgj1 )
     org_j0 = gf.ibtfy_1( org_j1 , offset^(idx<<1) )
-    #print( f"ibtfy( {hex(org_j1[0])} , {hex(org_j1[1])} , {hex(offset^(idx<<1))} ) -> {hex(org_j0[0])} , {hex(org_j0[1])}" )
     cc1 = org_j0[0] ^ gf.mul( org_j0[1] , xi )
-    #print( f" {hex(org_j0[0])} + xi:{hex(xi)} * {hex(org_j0[1])} -> {hex(cc1)}" )
     return new_j0[idx&1] == cc1
 
 def _check_deg1poly_linear_relation( mesgjm1 , d1poly , idx , xi , offset ) :
-    #print( "check d1poly" )
     m0 = gf.fft( gf.from_bytes_x2(d1poly) , 1 , (offset>>1)^(idx^(idx&1)) )
     return _check_linear_relation( mesgjm1 , gf.to_bytes(m0[0])+gf.to_bytes(m0[1]) , idx , xi , offset )
 
