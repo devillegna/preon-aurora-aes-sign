@@ -297,6 +297,47 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ) :
 
     return proof
 
+def codewords_of_public_polynomials( alpha , vec_1v , mat_A , mat_B , mat_C , pad_len , offset = (1<<63) , RS_rho = 8 , verbose = 1 ):
+    if 1 == verbose : dump = print
+    else : dump = _dummy
+    dump( "prepare f_alpha, p2A, p2B, p2C" )
+    f_alpha , p2A , p2B , p2C = lincheck_step1( alpha , mat_A , mat_B , mat_C , pad_len , 0 , verbose )
+    dump( "generate RS codeword of public polynomials" )
+    f_1v = cgf.ibtfy( vec_1v , 0 )
+    rs_f_1v    = gf.fft( f_1v , (pad_len//(len(f_1v)))*2*RS_rho , offset )
+    rs_f_alpha = gf.fft( f_alpha , 2*RS_rho , offset )
+    rs_f_p2A = gf.fft( p2A , 2*RS_rho , offset )
+    rs_f_p2B = gf.fft( p2B , 2*RS_rho , offset )
+    rs_f_p2C = gf.fft( p2C , 2*RS_rho , offset )
+    return rs_f_1v, rs_f_alpha, rs_f_p2A, rs_f_p2B, rs_f_p2C
+
+def values_from_virtual_oracle( _idx , aurora_open0 , aurora_open1 , lincheck_s , y , rs_codewords , inst_dim , r1cs_dim , offset = (1<<63) ):
+    # unpack input
+    rs_f_1v , rs_f_alpha , rs_f_p2A, rs_f_p2B, rs_f_p2C = rs_codewords
+    s1 , s2, s3 = lincheck_s
+    vv0 = [ gf.from_bytes_x2(aurora_open0[i*gf.GF_BSIZE*2:i*gf.GF_BSIZE*2+gf.GF_BSIZE*2]) for i in range(6) ]
+    v_w0 , v_Az0 , v_Bz0 , v_Cz0 , v_lincheck0 , v_ldt0 = vv0[0],vv0[1],vv0[2],vv0[3],vv0[4],vv0[5]
+    v_h0   = gf.from_bytes_x2(aurora_open1)
+
+    # generate output
+    values = []
+    for i in range(2):
+        idx = _idx*2 + i
+        cc0  = gf.mul(y[0],v_w0[i])^gf.mul(y[1],v_Az0[i])^gf.mul(y[2],v_Bz0[i])^gf.mul(y[3],v_Cz0[i])
+        v_f_rowcheck0 = gf.mul( (gf.mul( v_Az0[i] , v_Bz0[i] )^v_Cz0[i]) , cgf.gf264_inv( cgf.index_to_gf264((offset+idx)>>r1cs_dim) ) )
+        cc0 ^= gf.mul(y[4],v_f_rowcheck0)
+        cc0 ^= gf.mul(y[5],v_lincheck0[i])^gf.mul(y[6],v_h0[i])^v_ldt0[i]
+    
+        v_fz0 = rs_f_1v[idx]^gf.mul_gf264( v_w0[i] , cgf.index_to_gf264( (offset+idx)>>inst_dim ) )
+    
+        v_g0 =  gf.mul( s1 , gf.mul(v_Az0[i],rs_f_alpha[idx])^gf.mul(rs_f_p2A[idx],v_fz0) ) \
+               ^gf.mul( s2 , gf.mul(v_Bz0[i],rs_f_alpha[idx])^gf.mul(rs_f_p2B[idx],v_fz0) ) \
+               ^gf.mul( s3 , gf.mul(v_Cz0[i],rs_f_alpha[idx])^gf.mul(rs_f_p2C[idx],v_fz0) ) \
+               ^ v_lincheck0[i] ^ gf.mul_gf264( v_h0[i] , cgf.index_to_gf264((offset+idx)>>r1cs_dim) )
+        cc0 ^= gf.mul(y[7],v_g0) 
+        cc0 ^= gf.mul_gf264( gf.mul(y[8],v_g0), cgf.gf264_mul( cgf.index_to_gf264(offset+idx) , cgf.index_to_gf264((offset+idx)>>r1cs_dim) ) )
+        values.append( cc0 )
+    return gf.to_bytes(values[0])+gf.to_bytes(values[1])
 
 
 def verify_proof( proof , R1CS , h_state , RS_rho = 8 , verbose = 1 ) :
@@ -344,49 +385,22 @@ def verify_proof( proof , R1CS , h_state , RS_rho = 8 , verbose = 1 ) :
         return False
     dump( "all passed" )
 
+    offset = 1<<63
+    rs_codewords = codewords_of_public_polynomials( alpha , vec_1v , mat_A , mat_B , mat_C , pad_len , offset , RS_rho , verbose )
+
+    dump( "check virtual oracle consistency with the first opened commit of ldt." )
+    open_mesgs2 = ldt_open_mesgs[0]
+    for k,_idx in enumerate(queries) :
+        if open_mesgs2[k][0] != values_from_virtual_oracle( _idx , open_mesgs0[k][0] , open_mesgs1[k][0] , (s1,s2,s3)
+                                 , y , rs_codewords , inst_dim , r1cs_dim , offset ) :
+            dump( f"virtual oracle fails at idx: {_idx}" )
+            return False
+    dump( "The first opened commit should be replaced by the values from virtual oracle actually." )
+
     dump("verify ldt")
     ldt_r = fri.ldt_verify_proof(ldt_commits,ldt_d1poly,ldt_open_mesgs,xi,queries,Nq,verbose=0)
     dump( ldt_r )
     if not ldt_r : return False
 
-    dump( "prepare f_alpha, p2A, p2B, p2C" )
-    f_alpha , p2A , p2B , p2C = lincheck_step1( alpha , mat_A , mat_B , mat_C , pad_len , 0 , verbose )
-
-    dump( "RS codeword of polynomials" )
-    offset = 1<<63
-    f_1v = cgf.ibtfy( vec_1v , 0 )
-    rs_f_1v    = gf.fft( f_1v , (pad_len//(len(f_1v)))*2*RS_rho , offset )
-    rs_f_alpha = gf.fft( f_alpha , 2*RS_rho , offset )
-    rs_f_p2A = gf.fft( p2A , 2*RS_rho , offset )
-    rs_f_p2B = gf.fft( p2B , 2*RS_rho , offset )
-    rs_f_p2C = gf.fft( p2C , 2*RS_rho , offset )
-
-    open_mesgs2 = ldt_open_mesgs[0]
-    dump( "check virtual oracle consistency" )
-    for k,_idx in enumerate(queries) :
-        open_mesg0, open_mesg1, open_mesg2 = open_mesgs0[k] , open_mesgs1[k] , open_mesgs2[k]
-        vv0 = [ gf.from_bytes_x2(open_mesg0[0][i*gf.GF_BSIZE*2:i*gf.GF_BSIZE*2+gf.GF_BSIZE*2]) for i in range(6) ]
-        v_w0 , v_Az0 , v_Bz0 , v_Cz0 , v_lincheck0 , v_ldt0 = vv0[0],vv0[1],vv0[2],vv0[3],vv0[4],vv0[5]
-        v_h0   = gf.from_bytes_x2(open_mesg1[0])
-        v_f00  = gf.from_bytes_x2(open_mesg2[0])
-        ### check
-        for i in range(2):
-            idx = _idx*2 + i
-            cc0  = gf.mul(y[0],v_w0[i])^gf.mul(y[1],v_Az0[i])^gf.mul(y[2],v_Bz0[i])^gf.mul(y[3],v_Cz0[i])
-            v_f_rowcheck0 = gf.mul( (gf.mul( v_Az0[i] , v_Bz0[i] )^v_Cz0[i]) , cgf.gf264_inv( cgf.index_to_gf264((offset+idx)>>r1cs_dim) ) )
-            cc0 ^= gf.mul(y[4],v_f_rowcheck0)
-            cc0 ^= gf.mul(y[5],v_lincheck0[i])^gf.mul(y[6],v_h0[i])^v_ldt0[i]
-        
-            v_fz0 = rs_f_1v[idx]^gf.mul_gf264( v_w0[i] , cgf.index_to_gf264( (offset+idx)>>inst_dim ) )
-        
-            v_g0 =  gf.mul( s1 , gf.mul(v_Az0[i],rs_f_alpha[idx])^gf.mul(rs_f_p2A[idx],v_fz0) ) \
-                   ^gf.mul( s2 , gf.mul(v_Bz0[i],rs_f_alpha[idx])^gf.mul(rs_f_p2B[idx],v_fz0) ) \
-                   ^gf.mul( s3 , gf.mul(v_Cz0[i],rs_f_alpha[idx])^gf.mul(rs_f_p2C[idx],v_fz0) ) \
-                   ^ v_lincheck0[i] ^ gf.mul_gf264( v_h0[i] , cgf.index_to_gf264((offset+idx)>>r1cs_dim) )
-            cc0 ^= gf.mul(y[7],v_g0) 
-            cc0 ^= gf.mul_gf264( gf.mul(y[8],v_g0), cgf.gf264_mul( cgf.index_to_gf264(offset+idx) , cgf.index_to_gf264((offset+idx)>>r1cs_dim) ) )
-            if cc0 != v_f00[i]:
-                dump( f"check fails at idx: {idx}" )
-                return False
     dump("all passed") 
     return True
