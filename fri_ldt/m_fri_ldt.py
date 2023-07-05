@@ -23,54 +23,47 @@ def ldt_n_commit( f_length ):
     while( f_length > 2 ):
         i = i+1
         f_length = f_length//2
-    return i
+    return i-1
 
 ###################################
 
 
-def ldt_commit_phase( f0 , h_state , RS_rho=8 , verbose = 1 ):
+def ldt_commit_phase( vi , poly_len , h_state , RS_rho=8 , verbose = 1 ):
     if 1 == verbose : dump = print
     else : dump = _dummy
 
-    poly_len = len(f0)
     assert 0==(poly_len&(poly_len-1)) , 'poly_len is not a power of 2'
+    assert len(vi)==poly_len*RS_rho   , 'RS_rho * poly_len != len(vi)'
     offset = 1<<63
     dump( f"rho: {RS_rho}, offset: {hex(offset)}" )
 
     commits = []
     mktrees = []
 
-    dump( f"|original poly| : {len(f0)}")
+    dump( f"|original poly| : {poly_len}")
     dump( "\n### commit phase ###" )
 
-    vi = gf.fft( f0 , RS_rho , offset )
-    dump( f"?? Assume the evaluate on [{hex(offset)},|{poly_len}|x{RS_rho}) has been committed ?" )
+    dump( f"Assume the evaluate on [{hex(offset)},|{poly_len}|x{RS_rho}) has been committed." )
     dump( "|vi|:" , len(vi) )
     i = 0
-    xi = gf.from_bytes( H.gen( h_state , bytes([3+i,1]) )[:gf.GF_BSIZE] )
-    dump( f"derive x0 <- H( h_state || 3 || 1 ): {hex(xi)}" )
     while( 2 < poly_len ):
-        dump( f"iteration {i}: [{poly_len}] -> [{poly_len//2}]:" )
-        if 0 == i :
-            dump( f"do a redundent commit[{i}] here for checking correctness" )
-        mesg = [ gf.to_bytes(vi[j]) + gf.to_bytes(vi[j+1]) for j in range(0,len(vi),2) ]
-        root , randomness , tree = mt.commit( mesg )
-        mktrees.append( (root,mesg,randomness,tree) )
-        commits.append( root )
-        dump( f"commit evaluated valuse. --> commits[{len(commits)-1}] <- |mesg|: {len(mesg)}" )
-        dump( f"|commits| = {len(commits)}" )
-
-        if 0 == i :
-            h_state = H.gen( h_state , gf.to_bytes(xi) )
-            dump( f"update h_state <- H( h_state|| xi ): {h_state}" )
+        dump( f"iteration {i}:" )
+        if 0 == i : dump( "Skip the first commit. It should be replaced by the virtual oracle." )
         else      :
+            mesg = [ gf.to_bytes(vi[j]) + gf.to_bytes(vi[j+1]) for j in range(0,len(vi),2) ]
+            root , randomness , tree = mt.commit( mesg )
+            mktrees.append( (root,mesg,randomness,tree) )
+            commits.append( root )
+            dump( f"commit evaluated valuse. --> commits[{len(commits)-1}] <- |mesg|: {len(mesg)}" )
+            dump( f"|commits| = {len(commits)}" )
+
             h_state = H.gen( h_state , gf.to_bytes(xi) , root )
             dump( f"update h_state <- H( h_state|| xi || commit ): {h_state}" )
 
         i = i+1
-        dump( f"update i: {i}" )
-        xi = gf.from_bytes( H.gen( h_state , bytes([3+i,1]) )[:gf.GF_BSIZE] )
-        dump( f"derive new challenge xi <- H(h_state||{3+i}||1) : {hex(xi)}" )
+        dump( f"update {i}: [{poly_len}] -> [{poly_len//2}]:" )
+        xi = gf.from_bytes( H.gen( h_state , bytes([2+i,1]) )[:gf.GF_BSIZE] )
+        dump( f"derive new challenge xi <- H(h_state||{2+i}||1) : {hex(xi)}" )
         dump( f"deriving new polynomial of length [{poly_len//2}]" )
 
         #dump( f"v{i-1}: " , list(map(hex,vi)) )
@@ -103,11 +96,15 @@ def ldt_query_phase( f_length , mktrees, h_state , Nq , RS_rho=8 , verbose = 1 )
     assert Nq < 256 , "need to modify hash inputs if supporting >= 256 queries."
 
     dump( "\n### query phase ###" )
+    dump( f"queries = [ H.gen(h_state , {3+ldt_n_commit(f_length)+1} , j )  for j in range(1,{Nq+1})]")
     queries = [ H.gen(h_state,bytes( [ 3+ldt_n_commit(f_length)+1 , j ] ))[:4] for j in range(1,Nq+1) ]   # use 32 bits of hash results only
     idx_mask = (RS_rho*f_length//2)-1
     queries = [ int.from_bytes(e,'little')&idx_mask for e in queries ]
     _queries = list(queries)
     dump( f"Queries: [{len(queries)}], {queries}" )
+
+    # no need to open valuse of f_0
+    queries = [ q//2 for q in queries ]
 
     open_mesgs = []
     j = 0
@@ -121,10 +118,20 @@ def ldt_query_phase( f_length , mktrees, h_state , Nq , RS_rho=8 , verbose = 1 )
 
 
 def ldt_gen_proof( f0 , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ):
-    commits , d1poly , mktrees , h_state = ldt_commit_phase( f0 , h_state , RS_rho , verbose )
+    if 1 == verbose : dump = print
+    else : dump = _dummy
+
+    vi = gf.fft( f0 , RS_rho , 1<<63 )
+    dump( f"do a redundent commit for v_f0 here for checking correctness" )
+    mesg0 = [ gf.to_bytes(vi[j]) + gf.to_bytes(vi[j+1]) for j in range(0,len(vi),2) ]
+    rt0 , rd0 , tree0 = mt.commit( mesg0 )   # first commit
+
+    commits , d1poly , mktrees , h_state = ldt_commit_phase( vi , len(f0) , h_state , RS_rho , verbose )
     open_mesgs , queries = ldt_query_phase( len(f0) , mktrees , h_state , Nq , RS_rho , verbose )
     commits.append( d1poly )
     commits.extend( open_mesgs )
+    commits.append( mt.batchopen(queries,mesg0,rd0,tree0) )  # opened messages of first commit
+    commits.insert(0,rt0 )    # commit of values of f_0
     return commits
 
 
@@ -139,32 +146,26 @@ def ldt_recover_challenges( _poly_len , h_state , commits , d1poly , Nq , RS_rho
     poly_len = _poly_len
     i = 0
     xi = []
-    xi.append( gf.from_bytes( H.gen( h_state , bytes([3+i,1]) )[:gf.GF_BSIZE] ) )
-    dump( f"derive x0 <- H( h_state || 3 || 1 ): {hex(xi[0])}" )
     while( 2 < poly_len ):
         dump( f"iteration {i}: [{poly_len}] -> [{poly_len//2}]:" )
-        dump( f"mt.root = commits[{i}] = " ,  commits[i] )
-
-        if i==0:
-            h_state = H.gen( h_state , gf.to_bytes(xi[i]) )
-            dump( f"update h_state <- H( h_state|| xi ): {h_state}" )
-        else :
-            h_state = H.gen( h_state , gf.to_bytes(xi[i]) , commits[i] )
+        if i :
+            dump( f"mt.root = commits[{i-1}] = " ,  commits[i-1] )
+            h_state = H.gen( h_state , gf.to_bytes(xi[i-1]) , commits[i-1] )
             dump( f"update h_state <- H( h_state|| xi || commit ): {h_state}" )
-
 
         i = i+1
         dump( f"update i: {i}" )
-        xi.append( gf.from_bytes( H.gen( h_state , bytes([3+i,1]) )[:gf.GF_BSIZE] ) )
-        dump( f"derive new challenge xi <- H(h_state||{3+i}||1) : {hex(xi[i])}" )
+        xi.append( gf.from_bytes( H.gen( h_state , bytes([2+i,1]) )[:gf.GF_BSIZE] ) )
+        dump( f"derive new challenge xi <- H(h_state||{2+i}||1) : {hex(xi[-1])}" )
 
         dump( f"new polynomial length [{poly_len//2}]" )
         poly_len = poly_len//2
-    h_state = H.gen( gf.to_bytes(xi[i]) , d1poly )
+    h_state = H.gen( gf.to_bytes(xi[-1]) , d1poly )
     dump( f"update h_state <- H( xi || deg1poly ): {h_state}" )
 
     dump( "\n### query phase ###" )
-    queries = [ H.gen(h_state,bytes( [ 3+i+1 , j ] ))[:4] for j in range(1,Nq+1) ]
+    dump( f"queries = [ H.gen(h_state , {3+i}=={3+ldt_n_commit(_poly_len)+1} , j )  for j in range(1,{Nq+1})]")
+    queries = [ H.gen(h_state,bytes( [ 3+i , j ] ))[:4] for j in range(1,Nq+1) ]
     idx_mask = (RS_rho*_poly_len//2)-1
     queries = [ int.from_bytes(e,'little')&idx_mask for e in queries ]
     dump( f"Queries: [{len(queries)}], {queries}" )
@@ -172,17 +173,30 @@ def ldt_recover_challenges( _poly_len , h_state , commits , d1poly , Nq , RS_rho
 
 
 
-def ldt_verify_proof( commits , d1poly , open_mesgs , xi , queries , Nq , verbose = 1 ):
+def ldt_verify_proof( commits , d1poly , first_mesgs , open_mesgs , xi , queries , Nq , verbose = 1 ):
     if 1 == verbose : dump = print
     else : dump = _dummy
 
     dump( "#### check linear relations and opened commit ######" )
     offset = 1<<63
     j = 0
+    # check first_mesgs
+    if True :
+        # check linear relations
+        dump( f"check linear relations:" )
+        mesg      = first_mesgs   # [ path[0] for path in first_mesgs ]
+        next_mesg = [ path[0] for path in open_mesgs[0] ]
+        verify_j  = [ _check_linear_relation(mesg[i],next_mesg[i],queries[i],xi[j],offset) for i in range(Nq) ]
+        dump( f"check linear relations:" , all(verify_j) )
+        if not all(verify_j) : return False
+        queries = [ q//2 for q in queries ]
+        offset >>= 1
+        j = j+1
+
     for idx,auths in enumerate(open_mesgs) :
         dump( f"open iteration: {j}" )
         dump( f"auths[{len(auths[0])}]: Nbyte: ", sum( map( len,auths[0]) ) )
-        if not mt.batchverify( queries , commits[j] , auths ) :
+        if not mt.batchverify( queries , commits[j-1] , auths ) :
             dump("batchverify() fails")
             return False
         else : dump("oepned mesgs are verified.")
@@ -192,7 +206,7 @@ def ldt_verify_proof( commits , d1poly , open_mesgs , xi , queries , Nq , verbos
         if idx == len(open_mesgs)-1 : break
         dump( f"check linear relations [{idx}]:" )
         next_mesg = [ path[0] for path in open_mesgs[idx+1] ]
-        verify_j  = [ _check_linear_relation(mesg[i],next_mesg[i],queries[i],xi[j+1],offset) for i in range(Nq) ]
+        verify_j  = [ _check_linear_relation(mesg[i],next_mesg[i],queries[i],xi[j],offset) for i in range(Nq) ]
         dump( f"check linear relations [{idx}]:" , all(verify_j) )
         if not all(verify_j) : return False
         queries = [ q//2 for q in queries ]
@@ -218,9 +232,14 @@ def _check_deg1poly_linear_relation( mesgjm1 , d1poly , idx , xi , offset ) :
 
 def ldt_verify( proof , _poly_len , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ):
     n_commits = ldt_n_commit( _poly_len )
-    commits     = proof[:n_commits]
-    d1poly      = proof[n_commits]
-    open_mesgs  = proof[n_commits+1:n_commits+1+n_commits]
+    first_commit = proof[0]
+    commits     = proof[1:1+n_commits]
+    d1poly      = proof[1+n_commits]
+    open_mesgs  = proof[2+n_commits:2+n_commits+n_commits]
+    first_mesgs = proof[2+n_commits+n_commits]
     xi, queries = ldt_recover_challenges(_poly_len,h_state,commits,d1poly,Nq, RS_rho, verbose )
-    return ldt_verify_proof(commits,d1poly,open_mesgs,xi,queries,Nq,verbose)
+
+    if not mt.batchverify( queries , first_commit , first_mesgs ) : return False
+
+    return ldt_verify_proof(commits,d1poly,[ path[0] for path in first_mesgs ],open_mesgs,xi,queries,Nq,verbose)
 
