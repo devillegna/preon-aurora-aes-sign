@@ -35,14 +35,14 @@ def _pad_len( n_or_m ):
     while( r < n_or_m ):  r = r<<1
     return r
 
-def commit_polys( polys , max_poly_len , RS_rho = 8 , offset = (1<<63) , verbose = 1 ):
+def commit_polys( polys , max_poly_len , RS_rho = 8 , RS_shift = (1<<63) , verbose = 1 ):
     if 1 == verbose : dump = print
     else : dump = _dummy
 
     dump( "commit polys: (poly_len):" , [ len(p) for p in polys ] )
     mesg0 = []
     for pp in polys :
-        v_p0 = gf.fft( pp , RS_rho * (max_poly_len//len(pp)) , offset )
+        v_p0 = gf.fft( pp , RS_rho * (max_poly_len//len(pp)) , RS_shift )
         v_p1 = [ int.to_bytes(x,gf.GF_BSIZE,'little') for x in v_p0 ]
         v_p2 = [ b''.join( (v_p1[2*i] , v_p1[2*i+1]) ) for i in range(len(v_p1)//2) ]
         mesg0.append( v_p2 )
@@ -228,7 +228,7 @@ def lincheck_step2( v_alpha , v_p2A , v_p2B , v_p2C ,  p_vec_z , v_Az , v_Bz , v
 
     return g , h
 
-def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ) :
+def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , RS_shift=1<<63 , verbose = 1 ) :
     if 1 == verbose : dump = print
     else : dump = _dummy
 
@@ -255,8 +255,7 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ) :
     proof = []
     ## first commit them: HASH their RS codeword
     dump( "commit f_w, f_Az, f_Bz , f_Cz, r_lincheck , r_ldt" )
-    offset = 1<<63
-    rt0 , mesgs0 , r_leaf0 , mktree0 = commit_polys( [f_w , f_Az , f_Bz , f_Cz , r_lincheck , r_ldt ] , 2*pad_len , RS_rho , offset , verbose )
+    rt0 , mesgs0 , r_leaf0 , mktree0 = commit_polys( [f_w , f_Az , f_Bz , f_Cz , r_lincheck , r_ldt ] , 2*pad_len , RS_rho , RS_shift , verbose )
     proof.append( rt0 )
     h_state = H.gen( h_state , rt0 )
 
@@ -266,7 +265,7 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ) :
     vs    = lincheck_step1( alpha , mat_A , mat_B , mat_C , pad_len , 1 , verbose )
     g , h = lincheck_step2( *vs , p_vec_z , v_Az , v_Bz , v_Cz , s1 , s2 , s3  , r_lincheck , pad_len , verbose )
     dump( f"commit h" )
-    rt1 , mesgs1 , r_leaf1 , mktree1 = commit_polys( [ h ] , 2*pad_len , RS_rho , offset , verbose )
+    rt1 , mesgs1 , r_leaf1 , mktree1 = commit_polys( [ h ] , 2*pad_len , RS_rho , RS_shift , verbose )
     proof.append( rt1 )
     h_state = H.gen( *chals )
 
@@ -283,9 +282,9 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ) :
            for i,rgi in enumerate(g_raise) ]
     ## LDT f0
     dump( "ldt |f0|:", len(f0) )
-    v_f0 = gf.fft( f0 , RS_rho , offset )
+    v_f0 = gf.fft( f0 , RS_rho , RS_shift )
     dump( "calculate RS code of f0: |v_f0|: " , len(v_f0) )
-    ldt_commits , ldt_d1poly , ldt_mktrees , h_state = fri.ldt_commit_phase( v_f0 , len(f0) , h_state , RS_rho , verbose=0 )
+    ldt_commits , ldt_d1poly , ldt_mktrees , h_state = fri.ldt_commit_phase( v_f0 , len(f0) , h_state , RS_rho , RS_shift, verbose=0 )
     ldt_open_mesgs , ldt_queries = fri.ldt_query_phase( len(f0) , ldt_mktrees , h_state , Nq , RS_rho , verbose=0 )
     dump( "ldt queries:" , ldt_queries )
 
@@ -299,21 +298,22 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ) :
 
     return proof
 
-def codewords_of_public_polynomials( alpha , vec_1v , mat_A , mat_B , mat_C , pad_len , offset = (1<<63) , RS_rho = 8 , verbose = 1 ):
+def codewords_of_public_polynomials( alpha , vec_1v , mat_A , mat_B , mat_C , pad_len , RS_rho = 8 , RS_shift = (1<<63) , verbose = 1 ):
     if 1 == verbose : dump = print
     else : dump = _dummy
     dump( "prepare f_alpha, p2A, p2B, p2C" )
     f_alpha , p2A , p2B , p2C = lincheck_step1( alpha , mat_A , mat_B , mat_C , pad_len , 0 , verbose )
     dump( "generate RS codeword of public polynomials" )
     f_1v = cgf.ibtfy( vec_1v , 0 )
-    rs_f_1v    = gf.fft( f_1v , (pad_len//(len(f_1v)))*2*RS_rho , offset )
-    rs_f_alpha = gf.fft( f_alpha , 2*RS_rho , offset )
-    rs_f_p2A = gf.fft( p2A , 2*RS_rho , offset )
-    rs_f_p2B = gf.fft( p2B , 2*RS_rho , offset )
-    rs_f_p2C = gf.fft( p2C , 2*RS_rho , offset )
+    rs_f_1v    = gf.fft( f_1v , (pad_len//(len(f_1v)))*2*RS_rho , RS_shift )
+    rs_f_alpha = gf.fft( f_alpha , 2*RS_rho , RS_shift )
+    rs_f_p2A = gf.fft( p2A , 2*RS_rho , RS_shift )
+    rs_f_p2B = gf.fft( p2B , 2*RS_rho , RS_shift )
+    rs_f_p2C = gf.fft( p2C , 2*RS_rho , RS_shift )
     return rs_f_1v, rs_f_alpha, rs_f_p2A, rs_f_p2B, rs_f_p2C
 
-def values_from_virtual_oracle( _idx , aurora_open0 , aurora_open1 , lincheck_s , y , rs_codewords , inst_dim , r1cs_dim , offset = (1<<63) ):
+def values_from_virtual_oracle( _idx , aurora_open0 , aurora_open1 , lincheck_s , y , rs_codewords , inst_dim , r1cs_dim , RS_shift = (1<<63) ):
+    offset = RS_shift
     # unpack input
     rs_f_1v , rs_f_alpha , rs_f_p2A, rs_f_p2B, rs_f_p2C = rs_codewords
     s1 , s2, s3 = lincheck_s
@@ -342,7 +342,7 @@ def values_from_virtual_oracle( _idx , aurora_open0 , aurora_open1 , lincheck_s 
     return gf.to_bytes(values[0])+gf.to_bytes(values[1])
 
 
-def verify_proof( proof , R1CS , h_state , RS_rho = 8 , verbose = 1 ) :
+def verify_proof( proof , R1CS , h_state , RS_rho = 8 , RS_shift=1<<63, verbose = 1 ) :
     if 1 == verbose : dump = print
     else : dump = _dummy
 
@@ -387,15 +387,14 @@ def verify_proof( proof , R1CS , h_state , RS_rho = 8 , verbose = 1 ) :
         return False
     dump( "all passed" )
 
-    offset = 1<<63
-    rs_codewords = codewords_of_public_polynomials( alpha , vec_1v , mat_A , mat_B , mat_C , pad_len , offset , RS_rho , verbose )
+    rs_codewords = codewords_of_public_polynomials( alpha , vec_1v , mat_A , mat_B , mat_C , pad_len , RS_rho , RS_shift , verbose )
 
     dump( "recover first opened commit of ldt from the virtual oracle of aurora" )
     ldt_1st_mesgs = [ values_from_virtual_oracle( _idx , open_mesgs0[k][0] , open_mesgs1[k][0] , (s1,s2,s3)
-                                 , y , rs_codewords , inst_dim , r1cs_dim , offset ) for k,_idx in enumerate(queries) ]
+                                 , y , rs_codewords , inst_dim , r1cs_dim , RS_shift ) for k,_idx in enumerate(queries) ]
 
     dump("verify ldt")
-    ldt_r = fri.ldt_verify_proof(ldt_commits,ldt_d1poly,ldt_1st_mesgs,ldt_open_mesgs,xi,queries,Nq,verbose=0)
+    ldt_r = fri.ldt_verify_proof(ldt_commits,ldt_d1poly,ldt_1st_mesgs,ldt_open_mesgs,xi,queries,RS_shift,verbose=0)
     dump( ldt_r )
     if not ldt_r : return False
 

@@ -28,24 +28,22 @@ def ldt_n_commit( f_length ):
 ###################################
 
 
-def ldt_commit_phase( vi , poly_len , h_state , RS_rho=8 , verbose = 1 ):
+def ldt_commit_phase( vi , poly_len , h_state , RS_rho=8 , RS_shift=1<<63, verbose = 1 ):
     if 1 == verbose : dump = print
     else : dump = _dummy
-
     assert 0==(poly_len&(poly_len-1)) , 'poly_len is not a power of 2'
     assert len(vi)==poly_len*RS_rho   , 'RS_rho * poly_len != len(vi)'
-    offset = 1<<63
-    dump( f"rho: {RS_rho}, offset: {hex(offset)}" )
 
     commits = []
     mktrees = []
 
+    dump( f"rho: {RS_rho}, offset: {hex(RS_shift)}" )
     dump( f"|original poly| : {poly_len}")
     dump( "\n### commit phase ###" )
-
-    dump( f"Assume the evaluate on [{hex(offset)},|{poly_len}|x{RS_rho}) has been committed." )
+    dump( f"Assume the evaluate on [{hex(RS_shift)},|{poly_len}|x{RS_rho}) has been committed." )
     dump( "|v0|:" , len(vi) )
     i = 0
+    offset = RS_shift
     while( 2 < poly_len ):
         dump( f"iteration {i}: update : [{poly_len}] -> [{poly_len//2}]:" )
         xi = gf.from_bytes( H.gen( h_state , bytes([3+i,1]) )[:gf.GF_BSIZE] )
@@ -119,12 +117,13 @@ def ldt_gen_proof( f0 , h_state , Nq = 26 , RS_rho = 8 , verbose = 1 ):
     if 1 == verbose : dump = print
     else : dump = _dummy
 
-    v0 = gf.fft( f0 , RS_rho , 1<<63 )
+    RS_shift = 1<<63
+    v0 = gf.fft( f0 , RS_rho , RS_shift )
     dump( f"do a redundent commit for v_f0 here for checking correctness" )
     mesg0 = [ gf.to_bytes(v0[j]) + gf.to_bytes(v0[j+1]) for j in range(0,len(v0),2) ]
     rt0 , rd0 , tree0 = mt.commit( mesg0 )   # first commit
 
-    commits , d1poly , mktrees , h_state = ldt_commit_phase( v0 , len(f0) , h_state , RS_rho , verbose )
+    commits , d1poly , mktrees , h_state = ldt_commit_phase( v0 , len(f0) , h_state , RS_rho , RS_shift , verbose )
     open_mesgs , queries = ldt_query_phase( len(f0) , mktrees , h_state , Nq , RS_rho , verbose )
 
     proof = [rt0]
@@ -170,12 +169,12 @@ def ldt_recover_challenges( _poly_len , h_state , commits , d1poly , Nq , RS_rho
 
 
 
-def ldt_verify_proof( commits , d1poly , first_mesgs , open_mesgs , xi , queries , Nq , verbose = 1 ):
+def ldt_verify_proof( commits , d1poly , first_mesgs , open_mesgs , xi , queries , RS_shift=1<<63 , verbose = 1 ):
     if 1 == verbose : dump = print
     else : dump = _dummy
 
     dump( "#### check linear relations and opened commit ######" )
-    offset = 1<<63
+    offset = RS_shift
     j = 0
     # check first_mesgs
     if True :
@@ -183,7 +182,7 @@ def ldt_verify_proof( commits , d1poly , first_mesgs , open_mesgs , xi , queries
         dump( f"check linear relations:" )
         mesg      = first_mesgs   # [ path[0] for path in first_mesgs ]
         next_mesg = [ path[0] for path in open_mesgs[0] ]
-        verify_j  = [ _check_linear_relation(mesg[i],next_mesg[i],queries[i],xi[j],offset) for i in range(Nq) ]
+        verify_j  = [ _check_linear_relation(mesg[i],next_mesg[i],q,xi[j],offset) for i,q in enumerate(queries) ]
         dump( f"check linear relations:" , all(verify_j) )
         if not all(verify_j) : return False
         queries = [ q//2 for q in queries ]
@@ -203,14 +202,14 @@ def ldt_verify_proof( commits , d1poly , first_mesgs , open_mesgs , xi , queries
         if idx == len(open_mesgs)-1 : break
         dump( f"check linear relations [{idx}]:" )
         next_mesg = [ path[0] for path in open_mesgs[idx+1] ]
-        verify_j  = [ _check_linear_relation(mesg[i],next_mesg[i],queries[i],xi[j],offset) for i in range(Nq) ]
+        verify_j  = [ _check_linear_relation(mesg[i],next_mesg[i],q,xi[j],offset) for i,q in enumerate(queries) ]
         dump( f"check linear relations [{idx}]:" , all(verify_j) )
         if not all(verify_j) : return False
         queries = [ q//2 for q in queries ]
         offset >>= 1
         j = j+1
     # check deg 1 poly
-    verify_j = [ _check_deg1poly_linear_relation(mesg[i],d1poly,queries[i],xi[-1],offset) for i in range(Nq) ]
+    verify_j = [ _check_deg1poly_linear_relation(mesg[i],d1poly,q,xi[-1],offset) for i,q in enumerate(queries) ]
     dump( f"check last linear relations (with the d1poly):" , all(verify_j) )
     if not all(verify_j) : return False
     return True
@@ -238,5 +237,5 @@ def ldt_verify( proof , _poly_len , h_state , Nq = 26 , RS_rho = 8 , verbose = 1
 
     if not mt.batchverify( queries , first_commit , first_mesgs ) : return False
 
-    return ldt_verify_proof(commits,d1poly,[ path[0] for path in first_mesgs ],open_mesgs,xi,queries,Nq,verbose)
+    return ldt_verify_proof(commits,d1poly,[path[0] for path in first_mesgs],open_mesgs,xi,queries,1<<63,verbose)
 
