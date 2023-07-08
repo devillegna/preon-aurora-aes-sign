@@ -4,9 +4,7 @@ sys.path.insert(0, '../' )
 
 from utils import randombytes as rd
 
-
 from Crypto.Cipher import AES
-#from Crypto.Util   import Counter
 
 def preon_keygen():
   aes128_key = rd.randombytes( 16 )

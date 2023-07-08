@@ -19,8 +19,6 @@ from utils import hash as H
 
 from fri_ldt import m_fri_ldt as fri
 
-import numpy as np
-
 def _dummy( *params ) : return None
 
 def _log2( w ):
