@@ -16,16 +16,14 @@ def preon_keygen():
 
 
 from aesR1CS import aes128R1CS_z as R1CSz
-from aesR1CS import r1cs
-import numpy as np
+from aesR1CS import aes128R1CS   as r1cs
 from utils import hash as H
 from aurora import m_aurora as aurora
 
 
 def preon_sign( sk , mesg ):
     z = R1CSz.get_vec_z( *sk ,64)
-    MATs = r1cs.get_r1cs( R1CSz.aes128R1CS_num_constrains , len(z) , 64, 128)  # AES128
-    mat_a , mat_b , mat_c = np.array(MATs['A']) , np.array(MATs['B']) , np.array(MATs['C'])
+    mat_a , mat_b , mat_c = r1cs.get_aes128r1cs( R1CSz.aes128R1CS_num_constrains , len(z) , 64, 128)  # AES128
     h_state = H.gen( bytes([1]) , mesg )
     sig = aurora.generate_proof( (mat_a,mat_b,mat_c,z,64) , h_state , RS_rho = 32 )
     return sig
@@ -33,7 +31,6 @@ def preon_sign( sk , mesg ):
 def preon_verify( pk , sig , mesg ):
     z = R1CSz.get_vec_z( *pk , 64 )
     z = R1CSz.get_vec_1v( *pk , len(z) )
-    MATs = r1cs.get_r1cs( R1CSz.aes128R1CS_num_constrains , len(z) , 64, 128)  # AES128
-    mat_a , mat_b , mat_c = np.array(MATs['A']) , np.array(MATs['B']) , np.array(MATs['C'])
+    mat_a , mat_b , mat_c = r1cs.get_aes128r1cs( R1CSz.aes128R1CS_num_constrains , len(z) , 64, 128)  # AES128
     h_state = H.gen( bytes([1]) , mesg )
     return aurora.verify_proof( sig , (mat_a,mat_b,mat_c,z[:64],64) , h_state , RS_rho = 32  )

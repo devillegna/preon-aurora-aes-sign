@@ -13,9 +13,9 @@ def _remove_0( list_of_i_v ):
     return r
 
 def get_aes128r1cs(constraints_count, constaint_len, witness_index_base, aes_size):
-    mat_a = sp_mat(constraints_count,constaint_len)
-    mat_b = sp_mat(constraints_count,constaint_len)
-    mat_c = sp_mat(constraints_count,constaint_len)
+    mat_a = sp_mat(constaint_len,constraints_count)
+    mat_b = sp_mat(constaint_len,constraints_count)
+    mat_c = sp_mat(constaint_len,constraints_count)
 
     result = {
         'A': [[0 for _ in range(constaint_len)] for _ in range(constraints_count)],

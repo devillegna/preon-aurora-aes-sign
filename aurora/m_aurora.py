@@ -52,15 +52,12 @@ def commit_polys( polys , max_poly_len , RS_rho = 8 , RS_shift = (1<<63) , verbo
     rt , r_leaf , mktree = mt.commit( mesgs )
     return rt , mesgs , r_leaf , mktree
 
-def mat_x_vec( mat , vec , n_row=-1) :
-    if 0 > n_row : n_row = len(mat)
-    r = [0]*n_row
-    for i in range(n_row):
-        ri = 0
-        for j in range(len(vec)):
-            if 0 == mat[i][j] : continue     # it's ok since the mat is public.
-            ri ^= cgf.gf264_mul( mat[i][j] , vec[j] )
-        r[i] = ri
+def mat_x_vec( mat , vec ) :
+    r = [0]*mat.n_rows
+    for i,e in enumerate(vec):
+        if 0 == len(mat.col[i]) : continue
+        for idx,term in mat.col[i] :
+            r[idx] ^= e if 1==term else cgf.gf264_mul( term , e )
     return r
 
 def process_R1CS( R1CS , verbose = 1 ):
@@ -68,8 +65,8 @@ def process_R1CS( R1CS , verbose = 1 ):
     else : dump = _dummy
 
     mat_A , mat_B , mat_C , vec_z , witness_idx = R1CS
-    n = len(vec_z)
-    m = len(mat_A)
+    n = mat_A.n_cols
+    m = mat_A.n_rows
     pad_len = _pad_len( max(n,m) )
     inst_dim = _log2(witness_idx)
     dump( f"pad_len: {pad_len}, inst_dim: {inst_dim}" )
@@ -130,12 +127,20 @@ def row_check( v_Az , v_Bz , v_Cz , pad_len , verbose = 1 ) :
     dump( f"f_AB-C / Zh: [{len(f_rowcheck)}] " , f_rowcheck[:2] , "..." )
     return f_rowcheck
 
+def _vec_dotproduct( pub_sp_vec , vec ):
+    r = 0
+    for i,e in pub_sp_vec:
+        if 1==e : r ^= vec[i]
+        else    : r ^= gf.mul_gf264( vec[i] , e )
+    return r
+
+
 def lincheck_step1( alpha , mat_A , mat_B , mat_C , pad_len , value_or_poly , verbose = 1 ) :
     if 1 == verbose : dump = print
     else : dump = _dummy
 
-    m = len(mat_A)
-    n = len(mat_A[0])
+    n = mat_A.n_cols
+    m = mat_A.n_rows
 
     ## lincheck
     dump( "lin-check starts. calculate f_alpha, v_alpha" )
@@ -149,49 +154,11 @@ def lincheck_step1( alpha , mat_A , mat_B , mat_C , pad_len , value_or_poly , ve
     dump( "lin-check step 1. calculate p2A, p2B, p2C and evaluate their values" )
     dump( "evaluate values of p2A, p2B, p2C" )
     st = time.time()
-    v_a_264 = list( zip( *[gf.to_gf264s(e) for e in v_alpha[:m]] ) )
-    #v_a_264 = [ np.array(e,dtype=np.uint64) for e in _v_a_264 ]
-    _v_p2A_264 = []
-    for la in v_a_264 :
-          _v_p2Ai = [0]*n
-          for i in range(m):
-              for j in range(n) :
-                  if(0==mat_A[i][j]) : continue
-                  _v_p2Ai[j] ^= cgf.gf264_mul(la[i],mat_A[i][j])
-          _v_p2A_264.append( _v_p2Ai )
-    v_p2A = [ gf.from_gf264s(*e) for e in zip(*_v_p2A_264) ] + [0]*(pad_len-n)
-    _v_p2B_264 = []
-    for la in v_a_264 :
-          _v_p2Bi = [0]*n
-          for i in range(m):
-              for j in range(n) :
-                  if(0==mat_B[i][j]) : continue
-                  _v_p2Bi[j] ^= cgf.gf264_mul(la[i],mat_B[i][j])
-          _v_p2B_264.append( _v_p2Bi )
-    v_p2B = [ gf.from_gf264s(*e) for e in zip(*_v_p2B_264) ] + [0]*(pad_len-n)
-    _v_p2C_264 = []
-    for la in v_a_264 :
-          _v_p2Ci = [0]*n
-          for i in range(m):
-              for j in range(n) :
-                  if(0==mat_C[i][j]) : continue
-                  _v_p2Ci[j] ^= cgf.gf264_mul(la[i],mat_C[i][j])
-          _v_p2C_264.append( _v_p2Ci )
-    v_p2C = [ gf.from_gf264s(*e) for e in zip(*_v_p2C_264) ] + [0]*(pad_len-n)
+    v_p2A = [ _vec_dotproduct( mat_A.col[j] , v_alpha ) for j in range(n) ]; v_p2A.extend( [0]*(pad_len-n) )
+    v_p2B = [ _vec_dotproduct( mat_B.col[j] , v_alpha ) for j in range(n) ]; v_p2B.extend( [0]*(pad_len-n) )
+    v_p2C = [ _vec_dotproduct( mat_C.col[j] , v_alpha ) for j in range(n) ]; v_p2C.extend( [0]*(pad_len-n) )
     ed = time.time()
     dump( "time:" , format(ed-st) , "secs" )
-    # simple but slow code
-    #st = time.time()
-    #v_p2A , v_p2B , v_p2C = [0]*pad_len , [0]*pad_len , [0]*pad_len
-    #for j in range(n):
-    #    aj, bj, cj = mat_A[0][j] , mat_B[0][j] , mat_C[0][j]
-    #    for i in range(1,m):
-    #        aj ^= gf.mul_gf264( v_alpha[i] , mat_A[i][j] )
-    #        bj ^= gf.mul_gf264( v_alpha[i] , mat_B[i][j] )
-    #        cj ^= gf.mul_gf264( v_alpha[i] , mat_C[i][j] )
-    #    v_p2A[j] , v_p2B[j] , v_p2C[j] = aj , bj , cj
-    #ed = time.time()
-    #dump( "time:" , format(ed-st) , "secs" )
     dump( "interpolate p2A, p2B, p2C" )
     st = time.time()
     p2A , p2B , p2C = gf.ifft( v_p2A , 1 , 0 ) , gf.ifft( v_p2B , 1 , 0 ) , gf.ifft( v_p2C , 1 , 0 )
@@ -234,8 +201,8 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , RS_shift=1<<63 , ver
 
     ## process R1CS
     mat_A , mat_B , mat_C , vec_z , witness_idx = R1CS
-    n = len(vec_z)
-    m = len(mat_A)
+    n = mat_A.n_cols
+    m = mat_A.n_rows
     pad_len = _pad_len( max(n,m) )
     dump( f"m(#rows): {m} x n: {n}, witness_idx: {witness_idx}, pad_len: {pad_len}" )
 
@@ -348,8 +315,8 @@ def verify_proof( proof , R1CS , h_state , RS_rho = 8 , RS_shift=1<<63, verbose 
 
     ## process R1CS
     mat_A , mat_B , mat_C , vec_1v , witness_idx = R1CS
-    m = len(mat_A)
-    n = len(mat_A[0])
+    n = mat_A.n_cols
+    m = mat_A.n_rows
     pad_len = _pad_len( max(n,m) )
     dump( f"m(#rows): {m} x n: {n}, witness_idx: {witness_idx}, pad_len: {pad_len}" )
 
