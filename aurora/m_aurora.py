@@ -220,8 +220,11 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , RS_shift=1<<63 , ver
     proof = []
     ## first commit them: HASH their RS codeword
     dump( "commit f_w, f_Az, f_Bz , f_Cz, r_lincheck , r_ldt" )
+    st = time.time()
     rt0 , mesgs0 , r_leaf0 , mktree0 = commit_polys( [f_w , f_Az , f_Bz , f_Cz , r_lincheck , r_ldt ] , 2*pad_len , RS_rho , RS_shift , verbose )
     proof.append( rt0 )
+    ed = time.time()
+    dump( "time:" , format(ed-st) , "secs" )
     h_state = H.gen( h_state , rt0 )
 
     ## lin check
@@ -230,8 +233,11 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , RS_shift=1<<63 , ver
     vs    = lincheck_step1( alpha , mat_A , mat_B , mat_C , pad_len , 1 , verbose )
     g , h = lincheck_step2( *vs , p_vec_z , v_Az , v_Bz , v_Cz , s1 , s2 , s3  , r_lincheck , pad_len , verbose )
     dump( f"commit h" )
+    st = time.time()
     rt1 , mesgs1 , r_leaf1 , mktree1 = commit_polys( [ h ] , 2*pad_len , RS_rho , RS_shift , verbose )
     proof.append( rt1 )
+    ed = time.time()
+    dump( "time:" , format(ed-st) , "secs" )
     h_state = H.gen( *chals )
 
     ## generate f0 for fri_ldt and perform fri_ldt
@@ -249,8 +255,16 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , RS_shift=1<<63 , ver
     dump( "ldt |f0|:", len(f0) )
     v_f0 = gf.fft( f0 , RS_rho , RS_shift )
     dump( "calculate RS code of f0: |v_f0|: " , len(v_f0) )
+    dump( "commit phash" )
+    st = time.time()
     ldt_commits , ldt_d1poly , ldt_mktrees , h_state = fri.ldt_commit_phase( v_f0 , len(f0) , h_state , RS_rho , RS_shift, verbose=0 )
+    ed = time.time()
+    dump( "time:" , format(ed-st) , "secs" )
+    dump( "query phash" )
+    st = time.time()
     ldt_open_mesgs , ldt_queries = fri.ldt_query_phase( len(f0) , ldt_mktrees , h_state , Nq , RS_rho , verbose=0 )
+    ed = time.time()
+    dump( "time:" , format(ed-st) , "secs" )
     dump( "ldt queries:" , ldt_queries )
 
     proof.extend( ldt_commits )
