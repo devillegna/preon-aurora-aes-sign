@@ -39,15 +39,27 @@ def commit_polys( polys , max_poly_len , RS_rho = 8 , RS_shift = (1<<63) , verbo
 
     dump( "commit polys: (poly_len):" , [ len(p) for p in polys ] )
     mesg0 = []
+    dump( "RS encode:" )
+    st = time.time()
     for pp in polys :
         v_p0 = gf.fft( pp , RS_rho * (max_poly_len//len(pp)) , RS_shift )
         v_p1 = [ int.to_bytes(x,gf.GF_BSIZE,'little') for x in v_p0 ]
         v_p2 = [ b''.join( (v_p1[2*i] , v_p1[2*i+1]) ) for i in range(len(v_p1)//2) ]
         mesg0.append( v_p2 )
+    ed = time.time()
+    dump( "time:" , format(ed-st) , "secs" )
     dump( f"mesg0: ({max_poly_len}x{RS_rho}/2 = {max_poly_len*RS_rho//2}) " , [len(v) for v in mesg0] )
+    dump( "generate message:" )
+    st = time.time()
     mesgs = [ b''.join(e) for e in zip(*mesg0) ]
+    ed = time.time()
+    dump( "time:" , format(ed-st) , "secs" )
     dump( f"|mesgs:| = {len(mesgs)} , |mesgs[0]| = {len(mesgs[0])} == {gf.GF_BSIZE * 2 * len(mesg0)}" )
+    dump( "calculate mk root" )
+    st = time.time()
     rt , r_leaf , mktree = mt.commit( mesgs )
+    ed = time.time()
+    dump( "time:" , format(ed-st) , "secs" )
     return rt , mesgs , r_leaf , mktree
 
 def mat_x_vec( mat , vec ) :
@@ -220,11 +232,8 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , RS_shift=1<<63 , ver
     proof = []
     ## first commit them: HASH their RS codeword
     dump( "commit f_w, f_Az, f_Bz , f_Cz, r_lincheck , r_ldt" )
-    st = time.time()
     rt0 , mesgs0 , r_leaf0 , mktree0 = commit_polys( [f_w , f_Az , f_Bz , f_Cz , r_lincheck , r_ldt ] , 2*pad_len , RS_rho , RS_shift , verbose )
     proof.append( rt0 )
-    ed = time.time()
-    dump( "time:" , format(ed-st) , "secs" )
     h_state = H.gen( h_state , rt0 )
 
     ## lin check
@@ -232,12 +241,8 @@ def generate_proof( R1CS , h_state , Nq = 26 , RS_rho = 8 , RS_shift=1<<63 , ver
     alpha, s1, s2, s3 = gf.from_bytes(chals[0]), gf.from_bytes(chals[1]), gf.from_bytes(chals[2]), gf.from_bytes(chals[3])
     vs    = lincheck_step1( alpha , mat_A , mat_B , mat_C , pad_len , 1 , verbose )
     g , h = lincheck_step2( *vs , p_vec_z , v_Az , v_Bz , v_Cz , s1 , s2 , s3  , r_lincheck , pad_len , verbose )
-    dump( f"commit h" )
-    st = time.time()
     rt1 , mesgs1 , r_leaf1 , mktree1 = commit_polys( [ h ] , 2*pad_len , RS_rho , RS_shift , verbose )
     proof.append( rt1 )
-    ed = time.time()
-    dump( "time:" , format(ed-st) , "secs" )
     h_state = H.gen( *chals )
 
     ## generate f0 for fri_ldt and perform fri_ldt
