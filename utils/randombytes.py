@@ -23,14 +23,14 @@ class _prng(object):
     def gen(self, nbytes):
         r = bytearray()
         if self.used < 32 :
-            ready = 32 - _prng_used
+            ready = 32 - self.used
             if ready >= nbytes : ready = nbytes
             r.extend( self.buff[self.used:self.used+ready] )
             self.used += ready
             nbytes     -= ready
         while nbytes >= 32 :
             self._update()
-            r.extend( self.buff )
+            r.extend( self.buff[:32] )
             nbytes -= 32
         if nbytes :
             self._update()
@@ -50,3 +50,13 @@ if _debug :
     randombytes = lambda n : rng.gen(n)
 else      :
     randombytes = get_random_bytes
+
+
+
+if '__main__' == __name__ :
+    rng = _prng()
+    rng.set_seed(bytes([0]*64))
+    r65 = rng.gen(65)
+    for ri in r65:
+        print( f"{hex(ri)}," , end='' )
+    print('')
